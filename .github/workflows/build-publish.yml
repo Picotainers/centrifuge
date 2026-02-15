@@ -1,4 +1,4 @@
-name: Build and Publish Distroless centrifuge
+name: Build and Publish centrifuge
 
 on:
   push:

@@ -1,5 +1,5 @@
 # centrifuge
-Small, distroless-when-possible container for `centrifuge`.
+Small compatibility-focused container for `centrifuge`.
 
 ## how to use
 ```bash
