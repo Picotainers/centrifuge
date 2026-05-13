@@ -1,34 +1,34 @@
-# syntax=docker/dockerfile:1
-# Compatibility-first template for centrifuge.
-# Installs package from Bioconda and copies the full conda runtime to avoid missing libs/interpreters.
+FROM ubuntu:22.04 AS builder
 
-FROM mambaorg/micromamba:2.0.5-debian12-slim AS builder
+ARG DEBIAN_FRONTEND=noninteractive
+ARG CENTRIFUGE_VERSION=v1.0.4.1
 
-RUN micromamba install -y -n base -c conda-forge -c bioconda \
-    centrifuge \
-    && micromamba clean --all --yes
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    g++ \
+    gcc \
+    git \
+    make \
+    zlib1g-dev \
+  && rm -rf /var/lib/apt/lists/*
 
-# Resolve a runnable command for this package.
-# Prefer exact match, then underscore variant, then prefix match.
-RUN set -eux; \
-    BIN=""; \
-    if [ -x "/opt/conda/bin/centrifuge" ]; then BIN="/opt/conda/bin/centrifuge"; fi; \
-    if [ -z "$BIN" ]; then CAND="/opt/conda/bin/$(echo centrifuge | tr '-' '_')"; [ -x "$CAND" ] && BIN="$CAND" || true; fi; \
-    if [ -z "$BIN" ]; then BIN="$(find /opt/conda/bin -maxdepth 1 -type f -perm -111 -name 'centrifuge*' | head -n1 || true)"; fi; \
-    test -n "$BIN"; \
-    printf '%s\n' "$BIN" > /tmp/tool-entry-path
+WORKDIR /build
+RUN git clone --depth 1 --branch ${CENTRIFUGE_VERSION} https://github.com/DaehwanKimLab/centrifuge.git
+WORKDIR /build/centrifuge
+RUN make
 
-FROM mambaorg/micromamba:2.0.5-debian12-slim
+FROM ubuntu:22.04
 
-COPY --from=builder /opt/conda /opt/conda
-COPY --from=builder /tmp/tool-entry-path /tmp/tool-entry-path
+ARG DEBIAN_FRONTEND=noninteractive
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    zlib1g \
+  && rm -rf /var/lib/apt/lists/*
 
-USER root
-ENV PATH="/opt/conda/bin:${PATH}"
-ENV LD_LIBRARY_PATH="/opt/conda/lib:/opt/conda/lib64"
-RUN set -eux; \
-    BIN="$(cat /tmp/tool-entry-path)"; \
-    printf '#!/usr/bin/env bash\nexec "%s" "$@"\n' "$BIN" > /usr/local/bin/centrifuge
-RUN chmod +x /usr/local/bin/centrifuge && rm -f /tmp/tool-entry-path
+COPY --from=builder /build/centrifuge/centrifuge /usr/local/bin/centrifuge
+COPY --from=builder /build/centrifuge/centrifuge-build /usr/local/bin/centrifuge-build
+COPY --from=builder /build/centrifuge/centrifuge-inspect /usr/local/bin/centrifuge-inspect
+COPY --from=builder /build/centrifuge/centrifuge-kreport /usr/local/bin/centrifuge-kreport
+
 WORKDIR /data
-ENTRYPOINT ["/usr/local/bin/centrifuge"]
+ENTRYPOINT ["centrifuge"]
